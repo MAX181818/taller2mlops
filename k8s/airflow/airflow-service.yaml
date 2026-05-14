@@ -1,0 +1,23 @@
+# =========================================================
+# k8s/airflow/airflow-service.yaml
+# Service para exponer el webserver de Airflow
+# =========================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-service
+  namespace: mlops
+  labels:
+    app: airflow
+spec:
+  selector:
+    app: airflow
+    component: webserver
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30808        # acceso local: http://localhost:30808
+  type: NodePort

@@ -1,0 +1,51 @@
+# =========================================================
+# k8s/airflow/airflow-configmap.yaml
+# Variables de configuración no sensibles para Airflow
+# =========================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-config
+  namespace: mlops
+data:
+  # Core
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+  AIRFLOW__CORE__DAGS_FOLDER: "/opt/airflow/dags"
+  AIRFLOW__CORE__LOGS_FOLDER: "/opt/airflow/logs"
+
+  # Base de datos Airflow (metadata DB — usa la misma PostgreSQL)
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://mlops_user:mlops_pass@postgres-service:5432/mlops_db"
+
+  # Webserver
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+  AIRFLOW__WEBSERVER__RBAC: "False"
+
+  # Variables del proyecto
+  AIRFLOW_DAG_ID:          "diabetes_mlops_pipeline"
+  AIRFLOW__SCHEDULER__SCHEDULER_HEARTBEAT_SEC: "10"
+  AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: "600"
+  PYTHONPATH: "/opt/airflow"
+  BATCH_SIZE:              "15000"
+  SOURCE_FILE:             "/opt/airflow/data/diabetic_data.csv"
+
+  # PostgreSQL (conexión del DAG a los datos)
+  POSTGRES_HOST:           "postgres-service"
+  POSTGRES_PORT:           "5432"
+  POSTGRES_DB:             "mlops_db"
+  POSTGRES_SCHEMA_RAW:     "raw"
+  POSTGRES_SCHEMA_CLEAN:   "clean"
+  TABLE_RAW:               "diabetes_raw"
+  TABLE_CLEAN:             "diabetes_clean"
+
+  # MLflow
+  MLFLOW_TRACKING_URI:     "http://mlflow-service:5000"
+  MLFLOW_EXPERIMENT_NAME:  "diabetes_experiment"
+  MLFLOW_MODEL_NAME:       "diabetes_model"
+  MLFLOW_MODEL_ALIAS:      "champion"
+
+  # MinIO (artifact store para MLflow)
+  MLFLOW_S3_ENDPOINT_URL:  "http://minio-service:9000"
+  MINIO_ENDPOINT:          "minio-service:9000"
+  MINIO_BUCKET:            "mlflow-artifacts"

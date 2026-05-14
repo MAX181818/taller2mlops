@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlops-config
+  namespace: mlops
+data:
+  POSTGRES_HOST: postgres-service
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: mlops_db
+  POSTGRES_SCHEMA_RAW: raw
+  POSTGRES_SCHEMA_CLEAN: clean
+  POSTGRES_SCHEMA_INFERENCE: inference
+  TABLE_RAW: diabetes_raw
+  TABLE_CLEAN: diabetes_clean
+  TABLE_INFERENCE: inference_logs
+  MINIO_ENDPOINT: minio-service:9000
+  MINIO_BUCKET: mlflow-artifacts
+  MLFLOW_TRACKING_URI: http://mlflow-service:5000
+  MLFLOW_EXPERIMENT_NAME: diabetes_experiment
+  MLFLOW_MODEL_NAME: diabetes_model
+  MLFLOW_MODEL_ALIAS: champion
+  API_HOST: fastapi-service
+  API_PORT: "8000"
+  BATCH_SIZE: "15000"
+  AIRFLOW_DAG_ID: diabetes_mlops_pipeline

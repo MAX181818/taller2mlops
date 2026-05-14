@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: diabetes-training-job
+  namespace: mlops
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: garzonds201/mlops-airflow:latest
+          imagePullPolicy: Never
+          command:
+            - python3
+            - -c
+            - |
+              import json, mlflow, mlflow.sklearn
+              from sqlalchemy import create_engine
+              import pandas as pd
+              from sklearn.linear_model import LogisticRegression
+              from sklearn.metrics import roc_auc_score, f1_score, recall_score
+              from sklearn.model_selection import train_test_split
+              from sklearn.preprocessing import StandardScaler
+              from sklearn.pipeline import Pipeline
+
+              FEATURE_COLUMNS = [
+                  "age","time_in_hospital","num_lab_procedures","num_procedures",
+                  "num_medications","number_outpatient","number_emergency",
+                  "number_inpatient","number_diagnoses","race_encoded",
+                  "gender_encoded","admission_type_encoded","discharge_encoded",
+                  "admission_source_encoded","a1c_result_encoded",
+                  "metformin_encoded","insulin_encoded"
+              ]
+              TARGET_COLUMN = "readmitted"
+              MODEL_NAME = "diabetes_model"
+              EXPERIMENT = "diabetes_experiment"
+              MLFLOW_URI = "http://mlflow-service:5000"
+
+              mlflow.set_tracking_uri(MLFLOW_URI)
+              mlflow.set_experiment(EXPERIMENT)
+
+              engine = create_engine("postgresql://mlops_user:mlops_pass@postgres-service:5432/mlops_db")
+              df = pd.read_sql(f"SELECT {','.join(FEATURE_COLUMNS + [TARGET_COLUMN])} FROM clean.diabetes_clean", engine)
+              print(f"Datos cargados: {len(df)} filas")
+
+              X = df[FEATURE_COLUMNS].astype("float32")
+              y = df[TARGET_COLUMN]
+              X_tr, X_val, y_tr, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+              print(f"Train: {len(X_tr)}, Val: {len(X_val)}")
+
+              with mlflow.start_run() as run:
+                  model = Pipeline([
+                      ("scaler", StandardScaler()),
+                      ("clf", LogisticRegression(class_weight="balanced", max_iter=200, random_state=42, solver="lbfgs", n_jobs=1))
+                  ])
+                  model.fit(X_tr, y_tr)
+                  preds = model.predict(X_val)
+                  proba = model.predict_proba(X_val)[:, 1]
+                  metrics = {
+                      "roc_auc": float(roc_auc_score(y_val, proba)),
+                      "f1": float(f1_score(y_val, preds)),
+                      "recall": float(recall_score(y_val, preds)),
+                  }
+                  mlflow.log_params({"model_type": "LogisticRegression", "batch_id": "manual_job", "max_iter": 200})
+                  mlflow.log_metrics(metrics)
+                  mlflow.sklearn.log_model(model, "model", registered_model_name=MODEL_NAME)
+
+                  client = mlflow.MlflowClient()
+                  versions = client.get_latest_versions(MODEL_NAME)
+                  version = versions[0].version if versions else "1"
+
+                  result = {"run_id": run.info.run_id, "model_version": version, "metrics": metrics}
+                  print("RESULT_JSON:" + json.dumps(result))
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: MINIO_SECRET_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://minio-service:9000"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"

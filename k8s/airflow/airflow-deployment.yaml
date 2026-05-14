@@ -1,0 +1,208 @@
+# =========================================================
+# k8s/airflow/airflow-deployment.yaml
+# Deployment de Airflow — webserver + scheduler
+# Persona 2 | feat/p2-airflow
+# =========================================================
+
+# ── Webserver ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: mlops
+  labels:
+    app: airflow
+    component: webserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+      component: webserver
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: webserver
+    spec:
+      initContainers:
+        - name: airflow-db-migrate
+          image: garzonds201/mlops-airflow:latest
+          imagePullPolicy: Always
+          command: ["airflow", "db", "migrate"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: mlops-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+        - name: airflow-create-admin
+          image: garzonds201/mlops-airflow:latest
+          imagePullPolicy: Always
+          command:
+            - bash
+            - -c
+            - |
+              airflow users create \
+                --username admin \
+                --password $(AIRFLOW_ADMIN_PASSWORD) \
+                --firstname Admin \
+                --lastname MLOps \
+                --role Admin \
+                --email admin@mlops.local 2>/dev/null || true
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: mlops-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+      containers:
+        - name: airflow-webserver
+          image: garzonds201/mlops-airflow:latest
+          imagePullPolicy: Always
+          command: ["airflow", "webserver"]
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: mlops-secrets
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+            - name: logs
+              mountPath: /opt/airflow/logs
+            - name: data
+              mountPath: /opt/airflow/data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 5
+
+      volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-pvc
+        - name: logs
+          persistentVolumeClaim:
+            claimName: airflow-logs-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: airflow-data-pvc
+        - name: training-module
+          configMap:
+            name: airflow-training-module
+
+---
+# ── Scheduler ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: mlops
+  labels:
+    app: airflow
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: scheduler
+    spec:
+      containers:
+        - name: airflow-scheduler
+          image: garzonds201/mlops-airflow:latest
+          imagePullPolicy: Always
+          command: ["airflow", "scheduler"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: mlops-secrets
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+            - name: logs
+              mountPath: /opt/airflow/logs
+            - name: data
+              mountPath: /opt/airflow/data
+            - name: training-module
+              mountPath: /opt/airflow/training
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "250m"
+            limits:
+              memory: "5Gi"
+              cpu: "1000m"
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - airflow jobs check --job-type SchedulerJob --hostname "$(hostname)"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 30
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - airflow jobs check --job-type SchedulerJob --hostname "$(hostname)"
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 5
+            timeoutSeconds: 30
+
+      volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-pvc
+        - name: logs
+          persistentVolumeClaim:
+            claimName: airflow-logs-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: airflow-data-pvc
+        - name: training-module
+          configMap:
+            name: airflow-training-module

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlflow-config
+  namespace: mlops
+data:
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "mlflow_db"
+  MINIO_BUCKET: "mlflow-artifacts"
+  MLFLOW_S3_ENDPOINT_URL: "http://minio-service:9000"

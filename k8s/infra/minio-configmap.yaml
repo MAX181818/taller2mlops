@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-config
+  namespace: mlops
+data:
+  MINIO_BROWSER: "on"
+  MINIO_SITE_NAME: "mlops-minio"
+  MINIO_STORAGE_CLASS_STANDARD: "EC:0"
+  MINIO_CONSOLE_ADDRESS: ":9001"
